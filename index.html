@@ -97,6 +97,8 @@
     }
 
     textarea,
+    input[type="text"],
+    input[type="password"],
     input[type="file"] {
       width: 100%;
       font: inherit;
@@ -113,7 +115,19 @@
       line-height: 1.5;
     }
 
+    input[type="text"],
+    input[type="password"] {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      color: var(--ink);
+      line-height: 1.5;
+    }
+
     textarea:focus,
+    input[type="text"]:focus,
+    input[type="password"]:focus,
     input[type="file"]:focus,
     button:focus {
       outline: 2px solid rgba(15, 118, 110, 0.22);
@@ -264,7 +278,16 @@
       <div class="grid">
         <section class="stack">
           <div class="panel">
-            <label for="systemPrompt">System Prompt</label>
+            <label for="apiUrl">API URL</label>
+            <input id="apiUrl" type="text" value="http://localhost:1234/v1/chat/completions">
+
+            <label for="apiKey" style="margin-top: 14px;">API Key</label>
+            <input id="apiKey" type="password" placeholder="Optional">
+
+            <label for="modelName" style="margin-top: 14px;">Model Name</label>
+            <input id="modelName" type="text" value="qwen3.5-0.8b">
+
+            <label for="systemPrompt" style="margin-top: 14px;">System Prompt</label>
             <textarea id="systemPrompt" placeholder="You are a helpful assistant."></textarea>
           </div>
 
@@ -311,9 +334,9 @@
   </main>
 
   <script>
-    const API_URL = "http://localhost:1234/v1/chat/completions";
-    const MODEL_NAME = "qwen3.5-0.8b";
-
+    const apiUrlEl = document.getElementById("apiUrl");
+    const apiKeyEl = document.getElementById("apiKey");
+    const modelNameEl = document.getElementById("modelName");
     const systemPromptEl = document.getElementById("systemPrompt");
     const fileInputEl = document.getElementById("promptFile");
     const runButtonEl = document.getElementById("runButton");
@@ -389,14 +412,20 @@
       return { file, prompts };
     }
 
-    async function callLmStudio(systemPrompt, userPrompt) {
-      const response = await fetch(API_URL, {
+    async function callLmStudio(apiUrl, apiKey, modelName, systemPrompt, userPrompt) {
+      const headers = {
+        "Content-Type": "application/json"
+      };
+
+      if (apiKey) {
+        headers.Authorization = `Bearer ${apiKey}`;
+      }
+
+      const response = await fetch(apiUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers,
         body: JSON.stringify({
-          model: MODEL_NAME,
+          model: modelName,
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt }
@@ -461,6 +490,9 @@
 
       try {
         const { file, prompts } = await readSelectedFile();
+        const apiUrl = apiUrlEl.value.trim() || "http://localhost:1234/v1/chat/completions";
+        const apiKey = apiKeyEl.value.trim();
+        const modelName = modelNameEl.value.trim() || "qwen3.5-0.8b";
         const systemPrompt = systemPromptEl.value.trim() || "You are a helpful assistant.";
 
         setStatus("[0/" + prompts.length + "] Starting...", `Loaded ${prompts.length} prompts from ${file.name}.`);
@@ -470,7 +502,7 @@
           setStatus(`[${i + 1}/${prompts.length}] Processing...`, currentPrompt);
 
           try {
-            const modelResponse = await callLmStudio(systemPrompt, currentPrompt);
+            const modelResponse = await callLmStudio(apiUrl, apiKey, modelName, systemPrompt, currentPrompt);
             batchResults.push({
               index: i + 1,
               prompt: currentPrompt,
