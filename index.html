@@ -97,6 +97,7 @@
     }
 
     textarea,
+    select,
     input[type="text"],
     input[type="password"],
     input[type="file"] {
@@ -115,6 +116,7 @@
       line-height: 1.5;
     }
 
+    select,
     input[type="text"],
     input[type="password"] {
       border: 1px solid var(--border);
@@ -126,6 +128,7 @@
     }
 
     textarea:focus,
+    select:focus,
     input[type="text"]:focus,
     input[type="password"]:focus,
     input[type="file"]:focus,
@@ -278,6 +281,12 @@
       <div class="grid">
         <section class="stack">
           <div class="panel">
+            <label for="modeSelect">Mode</label>
+            <select id="modeSelect">
+              <option value="text">Text batch</option>
+              <option value="image">Image OCR</option>
+            </select>
+
             <label for="apiUrl">API URL</label>
             <input id="apiUrl" type="text" value="http://localhost:1234/v1/chat/completions">
 
@@ -295,6 +304,12 @@
             <label for="promptFile">Prompt File</label>
             <input id="promptFile" type="file" accept=".txt,.csv,text/plain,text/csv">
             <p class="footer-note">Each non-empty line will be treated as one user prompt.</p>
+          </div>
+
+          <div class="panel">
+            <label for="imageFile">Image File</label>
+            <input id="imageFile" type="file" accept=".jpg,.jpeg,.png,.gif,.webp,image/jpeg,image/png,image/gif,image/webp">
+            <p class="footer-note">Used only in Image OCR mode.</p>
           </div>
 
           <div class="controls">
@@ -334,11 +349,13 @@
   </main>
 
   <script>
+    const modeSelectEl = document.getElementById("modeSelect");
     const apiUrlEl = document.getElementById("apiUrl");
     const apiKeyEl = document.getElementById("apiKey");
     const modelNameEl = document.getElementById("modelName");
     const systemPromptEl = document.getElementById("systemPrompt");
     const fileInputEl = document.getElementById("promptFile");
+    const imageFileInputEl = document.getElementById("imageFile");
     const runButtonEl = document.getElementById("runButton");
     const downloadButtonEl = document.getElementById("downloadButton");
     const statusLineEl = document.getElementById("statusLine");
@@ -412,7 +429,24 @@
       return { file, prompts };
     }
 
-    async function callLmStudio(apiUrl, apiKey, modelName, systemPrompt, userPrompt) {
+    async function readSelectedImageFile() {
+      const file = imageFileInputEl.files[0];
+      if (!file) {
+        throw new Error("Please choose an image file first.");
+      }
+
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Failed to read the selected image file."));
+        reader.readAsDataURL(file);
+      });
+
+      return { file, dataUrl };
+    }
+
+    async function callLmStudio(apiUrl, apiKey, modelName, systemPrompt, userContent) {
       const headers = {
         "Content-Type": "application/json"
       };
@@ -428,7 +462,7 @@
           model: modelName,
           messages: [
             { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
+            { role: "user", content: userContent }
           ]
         })
       });
@@ -489,12 +523,52 @@
       resetResultsTable();
 
       try {
-        const { file, prompts } = await readSelectedFile();
         const apiUrl = apiUrlEl.value.trim() || "http://localhost:1234/v1/chat/completions";
         const apiKey = apiKeyEl.value.trim();
         const modelName = modelNameEl.value.trim() || "qwen3.5-0.8b";
+        const mode = modeSelectEl.value;
         const systemPrompt = systemPromptEl.value.trim() || "You are a helpful assistant.";
 
+        if (mode === "image") {
+          const { file, dataUrl } = await readSelectedImageFile();
+          const userContent = [
+            { type: "text", text: "Please describe or analyze this image." },
+            { type: "image_url", image_url: { url: dataUrl } }
+          ];
+
+          setStatus("[0/1] Starting...", `Loaded image ${file.name}.`);
+          setStatus("[1/1] Processing...", file.name);
+
+          try {
+            const modelResponse = await callLmStudio(apiUrl, apiKey, modelName, systemPrompt, userContent);
+            batchResults.push({
+              index: 1,
+              prompt: file.name,
+              response: modelResponse,
+              error: ""
+            });
+          } catch (error) {
+            batchResults.push({
+              index: 1,
+              prompt: file.name,
+              response: "",
+              error: error.message || String(error)
+            });
+          }
+
+          renderResultsTable(batchResults);
+
+          const imageErrorCount = batchResults.filter((item) => item.error).length;
+          const imageSuccessCount = batchResults.length - imageErrorCount;
+          setStatus(
+            "[1/1] Complete",
+            `${imageSuccessCount} succeeded, ${imageErrorCount} failed.`
+          );
+          downloadButtonEl.disabled = batchResults.length === 0;
+          return;
+        }
+
+        const { file, prompts } = await readSelectedFile();
         setStatus("[0/" + prompts.length + "] Starting...", `Loaded ${prompts.length} prompts from ${file.name}.`);
 
         for (let i = 0; i < prompts.length; i += 1) {
