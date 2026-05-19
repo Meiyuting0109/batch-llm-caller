@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Batch LLM Caller</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f1e8;
+      --panel: #fffdf8;
+      --ink: #1f2933;
+      --muted: #6b7280;
+      --accent: #0f766e;
+      --accent-dark: #115e59;
+      --border: #d6d3cc;
+      --shadow: 0 18px 48px rgba(31, 41, 51, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(180, 83, 9, 0.12), transparent 30%),
+        linear-gradient(180deg, #f7f3ea 0%, #efe7d8 100%);
+      padding: 32px 16px;
+    }
+
+    .shell {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: rgba(255, 253, 248, 0.96);
+      border: 1px solid rgba(214, 211, 204, 0.9);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+    }
+
+    .hero {
+      padding: 32px 32px 20px;
+      border-bottom: 1px solid rgba(214, 211, 204, 0.9);
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, 0.08), rgba(255, 255, 255, 0)),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0));
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 58ch;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 24px;
+      padding: 28px 32px 32px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel);
+      padding: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.92rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    textarea,
+    input[type="file"] {
+      width: 100%;
+      font: inherit;
+    }
+
+    textarea {
+      min-height: 220px;
+      resize: vertical;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      color: var(--ink);
+      line-height: 1.5;
+    }
+
+    textarea:focus,
+    input[type="file"]:focus,
+    button:focus {
+      outline: 2px solid rgba(15, 118, 110, 0.22);
+      outline-offset: 2px;
+    }
+
+    input[type="file"] {
+      border: 1px dashed var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      background: #fffcf6;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 999px;
+      padding: 12px 18px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, opacity 140ms ease, background 140ms ease;
+    }
+
+    button:hover:enabled {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    .primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+    }
+
+    .secondary {
+      color: var(--ink);
+      background: #ece7dc;
+    }
+
+    .status-box {
+      border-radius: 16px;
+      padding: 16px;
+      background: linear-gradient(180deg, #fbfaf6, #f4efe4);
+      border: 1px solid var(--border);
+    }
+
+    .status-line {
+      margin: 0 0 8px;
+      font-family: "SFMono-Regular", "Menlo", monospace;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+    }
+
+    .meta {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.5;
+    }
+
+    .results {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 12px;
+      border-bottom: 1px solid #ece7dc;
+      vertical-align: top;
+      font-size: 0.94rem;
+      line-height: 1.45;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #faf6ed;
+      z-index: 1;
+    }
+
+    .empty {
+      padding: 18px;
+      color: var(--muted);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(15, 118, 110, 0.1);
+      color: var(--accent-dark);
+    }
+
+    .footer-note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 880px) {
+      .grid {
+        grid-template-columns: 1fr;
+        padding: 20px;
+      }
+
+      .hero {
+        padding: 24px 20px 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <header class="hero">
+        <span class="badge">LM Studio Batch Runner</span>
+        <h1>Run one prompt per line.</h1>
+        <p>
+          Load a <code>.txt</code> or <code>.csv</code> file, send each line to LM Studio at
+          <code>http://localhost:1234/v1/chat/completions</code>, and export the results as a CSV.
+        </p>
+      </header>
+
+      <div class="grid">
+        <section class="stack">
+          <div class="panel">
+            <label for="systemPrompt">System Prompt</label>
+            <textarea id="systemPrompt" placeholder="You are a helpful assistant."></textarea>
+          </div>
+
+          <div class="panel">
+            <label for="promptFile">Prompt File</label>
+            <input id="promptFile" type="file" accept=".txt,.csv,text/plain,text/csv">
+            <p class="footer-note">Each non-empty line will be treated as one user prompt.</p>
+          </div>
+
+          <div class="controls">
+            <button id="runButton" class="primary">Run</button>
+            <button id="downloadButton" class="secondary" disabled>Download Results CSV</button>
+          </div>
+        </section>
+
+        <section class="stack">
+          <div class="status-box">
+            <p id="statusLine" class="status-line">[0/0] Idle</p>
+            <p id="statusMeta" class="meta">Pick a file to begin.</p>
+          </div>
+
+          <div class="panel">
+            <label>Results Preview</label>
+            <div class="results">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Prompt</th>
+                    <th>Response</th>
+                  </tr>
+                </thead>
+                <tbody id="resultsBody">
+                  <tr>
+                    <td colspan="3" class="empty">No results yet.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_URL = "http://localhost:1234/v1/chat/completions";
+    const MODEL_NAME = "qwen3.5-0.8b";
+
+    const systemPromptEl = document.getElementById("systemPrompt");
+    const fileInputEl = document.getElementById("promptFile");
+    const runButtonEl = document.getElementById("runButton");
+    const downloadButtonEl = document.getElementById("downloadButton");
+    const statusLineEl = document.getElementById("statusLine");
+    const statusMetaEl = document.getElementById("statusMeta");
+    const resultsBodyEl = document.getElementById("resultsBody");
+
+    let batchResults = [];
+
+    function setStatus(line, meta) {
+      statusLineEl.textContent = line;
+      statusMetaEl.textContent = meta;
+    }
+
+    function resetResultsTable() {
+      resultsBodyEl.innerHTML = `
+        <tr>
+          <td colspan="3" class="empty">No results yet.</td>
+        </tr>
+      `;
+    }
+
+    function renderResultsTable(results) {
+      if (!results.length) {
+        resetResultsTable();
+        return;
+      }
+
+      const rowsHtml = results.map((item) => {
+        const responseText = item.error ? `ERROR: ${item.error}` : item.response;
+        return `
+          <tr>
+            <td>${item.index}</td>
+            <td>${escapeHtml(item.prompt)}</td>
+            <td>${escapeHtml(responseText)}</td>
+          </tr>
+        `;
+      }).join("");
+
+      resultsBodyEl.innerHTML = rowsHtml;
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function parsePromptLines(fileText) {
+      return fileText
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    async function readSelectedFile() {
+      const file = fileInputEl.files[0];
+      if (!file) {
+        throw new Error("Please choose a .txt or .csv file first.");
+      }
+
+      const text = await file.text();
+      const prompts = parsePromptLines(text);
+
+      if (!prompts.length) {
+        throw new Error("The selected file does not contain any non-empty lines.");
+      }
+
+      return { file, prompts };
+    }
+
+    async function callLmStudio(systemPrompt, userPrompt) {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: MODEL_NAME,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText || "Request failed."}`);
+      }
+
+      const data = await response.json();
+      const message = data?.choices?.[0]?.message?.content;
+
+      if (!message) {
+        throw new Error("LM Studio returned no message content.");
+      }
+
+      return typeof message === "string" ? message.trim() : JSON.stringify(message);
+    }
+
+    function toCsv(rows) {
+      const header = ["index", "prompt", "response", "error"];
+      const body = rows.map((row) => [
+        row.index,
+        row.prompt,
+        row.response,
+        row.error
+      ]);
+
+      return [header, ...body]
+        .map((cells) => cells.map(csvEscape).join(","))
+        .join("\r\n");
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function downloadResultsCsv() {
+      const csvContent = toCsv(batchResults);
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().replaceAll(":", "-");
+
+      link.href = url;
+      link.download = `batch-results-${stamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function runBatch() {
+      runButtonEl.disabled = true;
+      downloadButtonEl.disabled = true;
+      batchResults = [];
+      resetResultsTable();
+
+      try {
+        const { file, prompts } = await readSelectedFile();
+        const systemPrompt = systemPromptEl.value.trim() || "You are a helpful assistant.";
+
+        setStatus("[0/" + prompts.length + "] Starting...", `Loaded ${prompts.length} prompts from ${file.name}.`);
+
+        for (let i = 0; i < prompts.length; i += 1) {
+          const currentPrompt = prompts[i];
+          setStatus(`[${i + 1}/${prompts.length}] Processing...`, currentPrompt);
+
+          try {
+            const modelResponse = await callLmStudio(systemPrompt, currentPrompt);
+            batchResults.push({
+              index: i + 1,
+              prompt: currentPrompt,
+              response: modelResponse,
+              error: ""
+            });
+          } catch (error) {
+            batchResults.push({
+              index: i + 1,
+              prompt: currentPrompt,
+              response: "",
+              error: error.message || String(error)
+            });
+          }
+
+          renderResultsTable(batchResults);
+        }
+
+        const errorCount = batchResults.filter((item) => item.error).length;
+        const successCount = batchResults.length - errorCount;
+        setStatus(
+          `[${batchResults.length}/${batchResults.length}] Complete`,
+          `${successCount} succeeded, ${errorCount} failed.`
+        );
+        downloadButtonEl.disabled = batchResults.length === 0;
+      } catch (error) {
+        setStatus("[0/0] Stopped", error.message || String(error));
+      } finally {
+        runButtonEl.disabled = false;
+      }
+    }
+
+    runButtonEl.addEventListener("click", runBatch);
+    downloadButtonEl.addEventListener("click", downloadResultsCsv);
+  </script>
+</body>
+</html>
